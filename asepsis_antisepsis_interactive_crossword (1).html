@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asepsis & Antisepsis — Interactive Crossword</title>
+<style>
+:root{--navy:#16324f;--teal:#147d80;--paper:#f4f8fb;--line:#d6e0e8;--ink:#182433;--good:#d9f5e5;--bad:#ffe1e1}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);font-family:Arial,Helvetica,sans-serif;color:var(--ink)}
+main{max-width:1000px;margin:0 auto;padding:22px}
+.hero{background:linear-gradient(135deg,#16324f,#147d80);color:white;border-radius:18px;padding:24px}
+.hero h1{margin:0 0 8px;font-size:clamp(24px,4vw,36px)}.hero p{margin:6px 0;line-height:1.5}
+.meta{font-size:13px;opacity:.9}
+.panel{background:white;border:1px solid var(--line);border-radius:16px;padding:18px;margin-top:16px;box-shadow:0 4px 14px #16324f0b}
+.layout{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(260px,.9fr);gap:18px}
+.gridwrap{overflow:auto;padding:8px 2px}.crossword{border-collapse:separate;border-spacing:2px;margin:auto}
+.crossword td{width:31px;height:31px;min-width:31px;position:relative;background:#16324f;border-radius:4px;text-align:center}
+.crossword td.blank{background:transparent}
+.crossword td.cell{background:#fff;border:1px solid #8ea5b8}
+.crossword td input{width:100%;height:100%;padding:0;border:0;outline:0;text-align:center;text-transform:uppercase;font-weight:700;font-size:16px;color:var(--navy);background:transparent;border-radius:4px}
+.crossword td input:focus{background:#dff7f4;box-shadow:inset 0 0 0 2px var(--teal)}
+.num{position:absolute;top:1px;left:3px;font-size:9px;color:#506b80;pointer-events:none}
+.clues h3{margin:0 0 10px;color:var(--navy)}.clues ol{padding-left:25px;margin:0}.clues li{margin:0 0 13px;line-height:1.35}.clues small{display:block;color:#607486;margin-top:3px}
+.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}
+button{border:0;border-radius:9px;padding:11px 15px;font-weight:700;cursor:pointer;background:var(--teal);color:white}
+button.secondary{background:#eaf0f5;color:var(--navy)}button:hover{filter:brightness(.96)}
+#feedback{margin-top:13px;padding:12px;border-radius:10px;display:none;line-height:1.5}
+#feedback.show{display:block}#feedback.good{background:var(--good)}#feedback.bad{background:var(--bad)}
+.note{font-size:13px;color:#607486;line-height:1.5}
+@media(max-width:760px){main{padding:12px}.layout{grid-template-columns:1fr}.panel{padding:13px}.crossword td{width:27px;height:27px;min-width:27px}.crossword td input{font-size:14px}}
+</style>
+</head>
+<body>
+<main>
+<header class="hero">
+ <div class="meta">GENERAL SURGERY · YEAR 3 · MEDICAL STUDENTS</div>
+ <h1>Asepsis &amp; Antisepsis</h1>
+ <p>Interactive medical terminology crossword</p>
+ <p class="meta">Complete the grid in English. Click a square and type one letter. Use the clues below.</p>
+</header>
+<section class="panel">
+ <div class="layout">
+  <div>
+   <h2 style="margin:0;color:#16324f">Crossword grid</h2>
+   <div class="gridwrap"><table class="crossword" id="grid" aria-label="Interactive crossword grid"></table></div>
+   <p class="note">Tip: Each white square holds one letter. The small number marks the clue number.</p>
+   <div class="actions">
+    <button id="check">Check answers</button>
+    <button class="secondary" id="reveal">Reveal solution</button>
+    <button class="secondary" id="reset">Start again</button>
+   </div>
+   <div id="feedback" role="status" aria-live="polite"></div>
+  </div>
+  <div class="clues">
+   <h2 style="margin:0 0 14px;color:#16324f">Clues</h2>
+   <h3>Across</h3><ol id="across"></ol>
+   <h3 style="margin-top:22px">Down</h3><ol id="down"></ol>
+  </div>
+ </div>
+</section>
+<section class="panel">
+ <h2 style="margin-top:0;color:#16324f">Quick revision</h2>
+ <p><b>Asepsis:</b> measures used to prevent microbial contamination.</p>
+ <p><b>Antisepsis:</b> antimicrobial measures applied to living tissue.</p>
+ <p><b>Sterilization:</b> destruction or removal of all forms of microbial life, including bacterial spores.</p>
+ <p><b>Disinfection:</b> elimination of many pathogenic microorganisms on inanimate objects; it does not necessarily destroy bacterial spores.</p>
+</section>
+<p class="note" style="text-align:center">Educational activity · Review local infection-prevention protocols and institutional guidance.</p>
+</main>
+<script>
+const entries = [
+ {answer:"STERILIZATION",dir:"across",clue:"Process that destroys all forms of microbial life, including bacterial spores."},
+ {answer:"ANTISEPSIS",dir:"across",clue:"Use of antimicrobial measures on living tissues."},
+ {answer:"DISINFECTION",dir:"across",clue:"Reduction or elimination of many harmful microorganisms on inanimate objects."},
+ {answer:"ASEPSIS",dir:"across",clue:"Prevention of microbial contamination, especially during procedures."},
+ {answer:"AUTOCLAVE",dir:"down",clue:"Device that uses pressurized steam to sterilize instruments."},
+ {answer:"LISTER",dir:"down",clue:"Surgeon associated with the development of antiseptic surgery."},
+ {answer:"GLOVES",dir:"down",clue:"Protective coverings worn on the hands during sterile procedures."},
+ {answer:"SCRUB",dir:"down",clue:"Surgical hand-washing procedure performed before an operation."}
+];
+const SIZE=35, OFFSET=17;
+let placed=[], gridMap=new Map(), cellInputs=new Map();
+function key(r,c){return r+","+c}
+function getCell(r,c){return gridMap.get(key(r,c))}
+function canPlace(word,r,c,dir,first=false){
+ let dr=dir==="down"?1:0, dc=dir==="across"?1:0, crossings=0;
+ const before=getCell(r-dr,c-dc), after=getCell(r+dr*word.length,c+dc*word.length);
+ if(before||after)return -1;
+ for(let i=0;i<word.length;i++){
+  let rr=r+dr*i,cc=c+dc*i, existing=getCell(rr,cc);
+  if(existing && existing.letter!==word[i])return -1;
+  if(existing){crossings++;continue}
+  if(dir==="across"){
+   if(getCell(rr-1,cc)||getCell(rr+1,cc))return -1;
+  }else{
+   if(getCell(rr,cc-1)||getCell(rr,cc+1))return -1;
+  }
+ }
+ return crossings;
+}
+function put(word,r,c,dir,number){
+ const dr=dir==="down"?1:0,dc=dir==="across"?1:0;
+ for(let i=0;i<word.length;i++){
+  const rr=r+dr*i,cc=c+dc*i,k=key(rr,cc);
+  if(!gridMap.has(k))gridMap.set(k,{letter:word[i],numbers:[]});
+  if(i===0)gridMap.get(k).numbers.push(number);
+ }
+ placed.push({word,r,c,dir,number});
+}
+function buildLayout(){
+ // Start with the longest word, then greedily cross the words already placed.
+ const sorted=[...entries].sort((a,b)=>b.answer.length-a.answer.length);
+ const first=sorted.shift(); put(first.answer,0,0,"across",1); first.number=1;
+ let nextNum=2, pending=sorted;
+ for(let pass=0;pass<entries.length+2 && pending.length;pass++){
+  let rest=[];
+  for(const item of pending){
+   let best=null;
+   for(let i=0;i<item.answer.length;i++){
+    for(const [k,cell] of gridMap){
+     if(cell.letter!==item.answer[i])continue;
+     const [rr,cc]=k.split(",").map(Number);
+     const dirs=["across","down"].filter(d=>d!==item.dir);
+     for(const dir of dirs){
+      const dr=dir==="down"?1:0,dc=dir==="across"?1:0;
+      const r=rr-dr*i,c=cc-dc*i;
+      const score=canPlace(item.answer,r,c,dir);
+      if(score>0 && (!best||score>best.score))best={r,c,dir,score};
+     }
+    }
+   }
+   if(best){item.number=nextNum++;put(item.answer,best.r,best.c,best.dir,item.number)}
+   else rest.push(item);
+  }
+  if(rest.length===pending.length)break;
+  pending=rest;
+ }
+ // Fallback: place any unplaced word in a separate parallel row/column.
+ for(const item of pending){
+  let r=0,c=0,dir=item.dir;
+  if(dir==="across"){r=Math.max(...[...gridMap.keys()].map(k=>+k.split(",")[0]))+3;c=-Math.floor(item.answer.length/2)}
+  else {c=Math.max(...[...gridMap.keys()].map(k=>+k.split(",")[1]))+3;r=-Math.floor(item.answer.length/2)}
+  let tries=0;while(canPlace(item.answer,r,c,dir)<0&&tries++<80){if(dir==="across")r++;else c++}
+  item.number=nextNum++;put(item.answer,r,c,dir,item.number);
+ }
+}
+function render(){
+ const keys=[...gridMap.keys()].map(k=>k.split(",").map(Number));
+ const minR=Math.min(...keys.map(x=>x[0])),maxR=Math.max(...keys.map(x=>x[0]));
+ const minC=Math.min(...keys.map(x=>x[1])),maxC=Math.max(...keys.map(x=>x[1]));
+ const table=document.getElementById("grid");table.innerHTML="";
+ cellInputs.clear();
+ for(let r=minR;r<=maxR;r++){
+  const tr=document.createElement("tr");
+  for(let c=minC;c<=maxC;c++){
+   const td=document.createElement("td"),cell=getCell(r,c);
+   if(!cell){td.className="blank"}
+   else{
+    td.className="cell";
+    if(cell.numbers.length){const num=document.createElement("span");num.className="num";num.textContent=cell.numbers[0];td.appendChild(num)}
+    const input=document.createElement("input");input.maxLength=1;input.autocomplete="off";input.setAttribute("aria-label",`Row ${r-minR+1}, column ${c-minC+1}`);
+    input.dataset.answer=cell.letter;input.dataset.key=key(r,c);
+    input.addEventListener("input",()=>{input.value=input.value.replace(/[^a-z]/gi,"").toUpperCase().slice(-1);input.style.background="";});
+    input.addEventListener("keydown",e=>{if(e.key==="Backspace"&&!input.value){focusNext(r,c,-1,0)}else if(e.key==="ArrowRight")focusNext(r,c,0,1);else if(e.key==="ArrowLeft")focusNext(r,c,0,-1);else if(e.key==="ArrowDown")focusNext(r,c,1,0);else if(e.key==="ArrowUp")focusNext(r,c,-1,0);});
+    td.appendChild(input);cellInputs.set(key(r,c),input);
+   }
+   tr.appendChild(td);
+  }table.appendChild(tr);
+ }
+ function focusNext(r,c,dr,dc){for(let i=1;i<40;i++){const el=cellInputs.get(key(r+dr*i,c+dc*i));if(el){el.focus();return}}}
+ for(const dir of ["across","down"]){
+  const list=document.getElementById(dir);list.innerHTML="";
+  placed.filter(p=>p.dir===dir).sort((a,b)=>a.number-b.number).forEach(p=>{
+   const li=document.createElement("li");li.value=p.number;
+   li.style.listStyleType="decimal";li.value=p.number;
+   li.innerHTML=`<b>${p.number}.</b> ${entries.find(e=>e.answer===p.word).clue}<small>${p.word.length} letters</small>`;
+   li.style.listStyle="none";li.style.marginLeft="-22px";
+   li.addEventListener("click",()=>{const dr=p.dir==="down"?1:0,dc=p.dir==="across"?1:0;const el=cellInputs.get(key(p.r,p.c));if(el)el.focus()});
+   list.appendChild(li);
+  });
+ }
+}
+buildLayout();render();
+document.getElementById("check").addEventListener("click",()=>{
+ let total=0,correct=0;
+ for(const input of cellInputs.values()){total++;const ok=input.value.toUpperCase()===input.dataset.answer; if(ok)correct++;input.style.background=ok?"#d9f5e5":"#ffe1e1";}
+ const fb=document.getElementById("feedback");fb.className="show "+(correct===total?"good":"bad");
+ fb.innerHTML=`<b>${correct===total?"Excellent — crossword complete!":"Progress: "+correct+" / "+total+" letters correct"}</b><br>${correct===total?"You have correctly completed the crossword.":"Green squares are correct; pink squares need another look."}`;
+});
+document.getElementById("reveal").addEventListener("click",()=>{
+ for(const input of cellInputs.values()){input.value=input.dataset.answer;input.style.background="#d9f5e5"}
+ const fb=document.getElementById("feedback");fb.className="show good";fb.textContent="Solution revealed. Use Start again to try the puzzle from the beginning.";
+});
+document.getElementById("reset").addEventListener("click",()=>{
+ for(const input of cellInputs.values()){input.value="";input.style.background=""}
+ const fb=document.getElementById("feedback");fb.className="";fb.textContent="";
+});
+</script>
+</body>
+</html>
